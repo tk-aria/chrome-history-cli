@@ -4,13 +4,27 @@ VERSION=v0.1.0
 # Chrome History DB path (auto-detect by OS)
 function _get_history_db {
   local os=$(uname)
+  local chrome_dir
   if [ "$os" = "Darwin" ]; then
-    echo "$HOME/Library/Application Support/Google/Chrome/Default/History"
+    chrome_dir="$HOME/Library/Application Support/Google/Chrome"
   elif [ "$os" = "Linux" ]; then
-    echo "$HOME/.config/google-chrome/Default/History"
+    chrome_dir="$HOME/.config/google-chrome"
   else
     # Windows (Git Bash / WSL)
-    echo "$LOCALAPPDATA/Google/Chrome/User Data/Default/History"
+    chrome_dir="$LOCALAPPDATA/Google/Chrome/User Data"
+  fi
+
+  # Try Default profile first, then Profile N
+  if [ -f "$chrome_dir/Default/History" ]; then
+    echo "$chrome_dir/Default/History"
+  else
+    local profile
+    profile=$(find "$chrome_dir" -maxdepth 1 -name "Profile *" -type d 2>/dev/null | sort | head -1)
+    if [ -n "$profile" ] && [ -f "$profile/History" ]; then
+      echo "$profile/History"
+    else
+      echo "$chrome_dir/Default/History"
+    fi
   fi
 }
 
