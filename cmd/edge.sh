@@ -19,7 +19,7 @@ function _get_db_path {
   elif [ "$os" = "Linux" ]; then
     base_dir="$HOME/.config/microsoft-edge"
   else
-    base_dir="$LOCALAPPDATA/Microsoft/Edge/User Data"
+    base_dir="${LOCALAPPDATA:-$USERPROFILE/AppData/Local}/Microsoft/Edge/User Data"
   fi
   if [ -f "$base_dir/Default/History" ]; then
     echo "$base_dir/Default/History"

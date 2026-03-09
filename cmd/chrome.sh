@@ -19,7 +19,7 @@ function _get_db_path {
   elif [ "$os" = "Linux" ]; then
     base_dir="$HOME/.config/google-chrome"
   else
-    base_dir="$LOCALAPPDATA/Google/Chrome/User Data"
+    base_dir="${LOCALAPPDATA:-$USERPROFILE/AppData/Local}/Google/Chrome/User Data"
   fi
   if [ -f "$base_dir/Default/History" ]; then
     echo "$base_dir/Default/History"

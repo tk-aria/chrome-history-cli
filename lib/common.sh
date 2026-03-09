@@ -8,7 +8,7 @@ function _prepare_db {
     echo "Error: History DB not found: $db_path" >&2
     return 1
   fi
-  local tmp=$(mktemp /tmp/browser_history_XXXXXX.db)
+  local tmp=$(mktemp "${TMPDIR:-${TEMP:-/tmp}}/browser_history_XXXXXX.db")
   cp "$db_path" "$tmp" 2>/dev/null
   echo "$tmp"
 }
@@ -159,8 +159,11 @@ function _subcmd_help {
 
   if [[ "$(uname)" == "Darwin" ]]; then
     REVERSE_CMD="tail -r"
-  else
+  elif command -v tac >/dev/null 2>&1; then
     REVERSE_CMD="tac"
+  else
+    # Portable reverse for Git Bash / MSYS2 (no tac available)
+    REVERSE_CMD="awk '{lines[NR]=\$0} END{for(i=NR;i>0;i--)print lines[i]}'"
   fi
 
   if [ "$brief" = false ]; then
@@ -185,7 +188,7 @@ EOF
     local startLine=$(grep -n "^function ${funcName} " "$script" | cut -d: -f1)
     if [ ! -z "$startLine" ]; then
       echo -e "\n${GREEN}${funcName}${RESET}:"
-      awk "NR < $startLine" "$script" | $REVERSE_CMD | awk '/^#/{flag=1; if(length($0)>1) print; else print ""} flag && /^$/{exit}' | $REVERSE_CMD | sed 's/^# //;s/^/  /'
+      awk "NR < $startLine" "$script" | eval "$REVERSE_CMD" | awk '/^#/{flag=1; if(length($0)>1) print; else print ""} flag && /^$/{exit}' | eval "$REVERSE_CMD" | sed 's/^# //;s/^/  /'
     fi
   done
 

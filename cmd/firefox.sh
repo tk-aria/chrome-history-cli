@@ -19,7 +19,7 @@ function _get_db_path {
   elif [ "$os" = "Linux" ]; then
     base_dir="$HOME/.mozilla/firefox"
   else
-    base_dir="$APPDATA/Mozilla/Firefox/Profiles"
+    base_dir="${APPDATA:-$USERPROFILE/AppData/Roaming}/Mozilla/Firefox/Profiles"
   fi
   # Find the default-release profile, fallback to first .default profile
   local profile_dir

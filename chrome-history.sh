@@ -11,7 +11,7 @@ function _get_history_db {
     chrome_dir="$HOME/.config/google-chrome"
   else
     # Windows (Git Bash / WSL)
-    chrome_dir="$LOCALAPPDATA/Google/Chrome/User Data"
+    chrome_dir="${LOCALAPPDATA:-$USERPROFILE/AppData/Local}/Google/Chrome/User Data"
   fi
 
   # Try Default profile first, then Profile N
@@ -36,7 +36,7 @@ function _prepare_db {
     echo "Set CHROME_HISTORY_DB env var to specify the path." >&2
     return 1
   fi
-  local tmp=$(mktemp /tmp/chrome_history_XXXXXX.db)
+  local tmp=$(mktemp "${TMPDIR:-${TEMP:-/tmp}}/chrome_history_XXXXXX.db")
   cp "$db_path" "$tmp" 2>/dev/null
   echo "$tmp"
 }
@@ -124,8 +124,11 @@ function help {
   # OS-specific reverse command
   if [[ "$(uname)" == "Darwin" ]]; then
     REVERSE_CMD="tail -r"
-  else
+  elif command -v tac >/dev/null 2>&1; then
     REVERSE_CMD="tac"
+  else
+    # Portable reverse for Git Bash / MSYS2 (no tac available)
+    REVERSE_CMD="awk '{lines[NR]=\$0} END{for(i=NR;i>0;i--)print lines[i]}'"
   fi
 
   if [ "$brief" = false ]; then
@@ -150,7 +153,7 @@ EOF
     local startLine=$(grep -n "^function ${funcName} " $0 | cut -d: -f1)
     if [ ! -z "$startLine" ]; then
       echo -e "\n${GREEN}${funcName}${RESET}:"
-      awk "NR < $startLine" $0 | $REVERSE_CMD | awk '/^#/{flag=1; if(length($0)>1) print; else print ""} flag && /^$/{exit}' | $REVERSE_CMD | sed 's/^# //;s/^/  /'
+      awk "NR < $startLine" $0 | eval "$REVERSE_CMD" | awk '/^#/{flag=1; if(length($0)>1) print; else print ""} flag && /^$/{exit}' | eval "$REVERSE_CMD" | sed 's/^# //;s/^/  /'
     fi
   done
 
@@ -524,7 +527,7 @@ function _get_chrome_profile_dir {
   elif [ "$os" = "Linux" ]; then
     chrome_dir="$HOME/.config/google-chrome"
   else
-    chrome_dir="$LOCALAPPDATA/Google/Chrome/User Data"
+    chrome_dir="${LOCALAPPDATA:-$USERPROFILE/AppData/Local}/Google/Chrome/User Data"
   fi
 
   if [ -d "$chrome_dir/Default" ]; then
@@ -574,7 +577,12 @@ function onetab {
 
   echo "url${SEP}title${SEP}group_date"
 
-  python3 -c "
+  local python_cmd="python3"
+  if ! command -v python3 >/dev/null 2>&1; then
+    python_cmd="python"
+  fi
+
+  "$python_cmd" -c "
 import os, re, json, sys
 from datetime import datetime, timezone
 
