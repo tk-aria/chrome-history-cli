@@ -515,6 +515,137 @@ function summary {
     ORDER BY cnt DESC;" $'\t' | awk -F'\t' '{printf "  %-20s %s\n", $1, $2}'
 }
 
+# Get Chrome profile directory
+function _get_chrome_profile_dir {
+  local os=$(uname)
+  local chrome_dir
+  if [ "$os" = "Darwin" ]; then
+    chrome_dir="$HOME/Library/Application Support/Google/Chrome"
+  elif [ "$os" = "Linux" ]; then
+    chrome_dir="$HOME/.config/google-chrome"
+  else
+    chrome_dir="$LOCALAPPDATA/Google/Chrome/User Data"
+  fi
+
+  if [ -d "$chrome_dir/Default" ]; then
+    echo "$chrome_dir/Default"
+  else
+    local profile
+    profile=$(find "$chrome_dir" -maxdepth 1 -name "Profile *" -type d 2>/dev/null | sort | head -1)
+    if [ -n "$profile" ]; then
+      echo "$profile"
+    else
+      echo "$chrome_dir/Default"
+    fi
+  fi
+}
+
+# Extract saved tabs from OneTab extension (LevelDB).
+#
+# Output columns: url | title | group_date
+#
+# Options:
+#   --limit, -n <number>     Max rows (default: 100)
+#   --format <tsv|csv>       Output format (default: tsv)
+#   --profile-dir <path>     Chrome profile directory (auto-detected)
+function onetab {
+  local limit=100 format="tsv" profile_dir=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --limit|-n) limit="$2"; shift 2 ;;
+      --format) format="$2"; shift 2 ;;
+      --profile-dir) profile_dir="$2"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+
+  _output_setup "$format"
+
+  if [ -z "$profile_dir" ]; then
+    profile_dir=$(_get_chrome_profile_dir)
+  fi
+
+  local onetab_dir="$profile_dir/Local Extension Settings/chphlpgkkbolifaimnlloiipkdnihall"
+  if [ ! -d "$onetab_dir" ]; then
+    echo "Error: OneTab data not found: $onetab_dir" >&2
+    echo "Is OneTab installed in this Chrome profile?" >&2
+    return 1
+  fi
+
+  echo "url${SEP}title${SEP}group_date"
+
+  python3 -c "
+import os, re, json, sys
+from datetime import datetime, timezone
+
+onetab_dir = sys.argv[1]
+sep = sys.argv[2]
+limit = int(sys.argv[3])
+
+entries = []
+for fname in sorted(os.listdir(onetab_dir)):
+    if not (fname.endswith('.ldb') or fname.endswith('.log')):
+        continue
+    fpath = os.path.join(onetab_dir, fname)
+    try:
+        with open(fpath, 'rb') as f:
+            raw = f.read()
+    except:
+        continue
+    text = raw.decode('utf-8', errors='replace')
+    clean = text.replace('\\\\\"', '\"')
+
+    # Find tab groups with createDate
+    for gm in re.finditer(r'(\[(?:\{[^]]*\}[,\s]*)+\]),?\"createDate\":(\d+)', clean):
+        try:
+            group_json = gm.group(1)
+            create_ts = int(gm.group(2))
+            group_date = datetime.fromtimestamp(create_ts / 1000, tz=timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+            tabs = json.loads(group_json)
+            for tab in tabs:
+                url = tab.get('url', '')
+                title = tab.get('title', '')
+                if url:
+                    entries.append((url, title, group_date))
+        except:
+            pass
+
+    # Fallback: find individual url/title pairs without group context (per-file)
+    if not any(e for e in entries if e[2]):
+        for m in re.finditer(r'\"url\":\"(https?://[^\"]+)\",\"title\":\"([^\"]*)\"', clean):
+            title = m.group(2)
+            # Skip entries with binary garbage in title
+            if any(ord(c) < 32 and c not in '\t\n\r' for c in title):
+                title = re.sub(r'[^\x20-\x7E\u0080-\uffff]', '', title)
+            entries.append((m.group(1), title, ''))
+
+# Deduplicate by url, keeping first occurrence
+seen = set()
+unique = []
+for url, title, gdate in entries:
+    if url not in seen:
+        seen.add(url)
+        unique.append((url, title, gdate))
+
+# Filter out entries with binary garbage in title or url
+clean = []
+for url, title, gdate in unique:
+    if any(ord(c) < 32 and c not in '\t\n\r' for c in title):
+        continue
+    if any(ord(c) < 32 for c in url):
+        continue
+    # Skip titles with replacement characters (LevelDB corruption)
+    if '\ufffd' in title or len(title) > 500:
+        continue
+    clean.append((url, title, gdate))
+
+output = clean if limit <= 0 else clean[:limit]
+for url, title, gdate in output:
+    title = title.replace(sep, ' ')
+    print(f'{url}{sep}{title}{sep}{gdate}')
+" "$onetab_dir" "$SEP" "$limit"
+}
+
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 
 cmd=$1
@@ -564,6 +695,11 @@ case "$cmd" in
 
   summary)
     summary "$@"
+    exit $?
+    ;;
+
+  onetab)
+    onetab "$@"
     exit $?
     ;;
 
