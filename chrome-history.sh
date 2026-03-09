@@ -195,7 +195,8 @@ function urls {
   done
 
   _output_setup "$format"
-  local db=$(_prepare_db) || return 1
+  local db
+  db=$(_prepare_db) || return 1
   trap "rm -f '$db'" RETURN
 
   local where=$(_build_date_filter "last_visit_time" "$from" "$to") || return 1
@@ -232,7 +233,8 @@ function visits {
   done
 
   _output_setup "$format"
-  local db=$(_prepare_db) || return 1
+  local db
+  db=$(_prepare_db) || return 1
   trap "rm -f '$db'" RETURN
 
   local where=$(_build_date_filter "v.visit_time" "$from" "$to") || return 1
@@ -288,7 +290,8 @@ function searches {
   done
 
   _output_setup "$format"
-  local db=$(_prepare_db) || return 1
+  local db
+  db=$(_prepare_db) || return 1
   trap "rm -f '$db'" RETURN
 
   local where=$(_build_date_filter "u.last_visit_time" "$from" "$to") || return 1
@@ -326,7 +329,8 @@ function downloads {
   done
 
   _output_setup "$format"
-  local db=$(_prepare_db) || return 1
+  local db
+  db=$(_prepare_db) || return 1
   trap "rm -f '$db'" RETURN
 
   local where=$(_build_date_filter "start_time" "$from" "$to") || return 1
@@ -372,7 +376,8 @@ function annotations {
   done
 
   _output_setup "$format"
-  local db=$(_prepare_db) || return 1
+  local db
+  db=$(_prepare_db) || return 1
   trap "rm -f '$db'" RETURN
 
   local where=$(_build_date_filter "v.visit_time" "$from" "$to") || return 1
@@ -414,7 +419,8 @@ function contexts {
   done
 
   _output_setup "$format"
-  local db=$(_prepare_db) || return 1
+  local db
+  db=$(_prepare_db) || return 1
   trap "rm -f '$db'" RETURN
 
   local where=$(_build_date_filter "v.visit_time" "$from" "$to") || return 1
@@ -452,7 +458,8 @@ function summary {
     esac
   done
 
-  local db=$(_prepare_db) || return 1
+  local db
+  db=$(_prepare_db) || return 1
   trap "rm -f '$db'" RETURN
 
   local where=$(_build_date_filter "v.visit_time" "$from" "$to") || return 1
