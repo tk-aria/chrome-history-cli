@@ -1,6 +1,8 @@
-# chrome-history-cli
+# browser-history-cli
 
-CLI tool to extract Google Chrome browsing history data via SQLite.
+CLI tool to extract browsing history from multiple browsers via SQLite.
+
+Supports: **Chrome**, **Edge**, **Firefox**, **Safari**
 
 Built on [cli.sh](https://github.com/tk-aria/cli.sh) framework pattern.
 
@@ -14,27 +16,36 @@ Built on [cli.sh](https://github.com/tk-aria/cli.sh) framework pattern.
 ```bash
 git clone https://github.com/tk-aria/chrome-history-cli.git
 cd chrome-history-cli
-chmod +x chrome-history.sh
+chmod +x browser-history.sh cmd/*.sh
 ```
 
 ## Usage
 
 ```bash
-./chrome-history.sh <command> [options]
+./browser-history.sh <browser> <command> [options]
 ```
 
-### Commands
+### Supported Browsers
 
-| Command | Description |
-|---------|-------------|
-| `urls` | URL list (title, visit count, typed count, last visit time) |
-| `visits` | Individual visit records (duration, transition type, referrer URL) |
-| `searches` | Search keywords |
-| `downloads` | Download history (path, size, MIME type, status) |
-| `annotations` | Content annotations (page category, language, search terms) |
-| `contexts` | Context annotations (foreground duration, response code) |
-| `summary` | Summary statistics (total visits, top domains, total time) |
-| `fzf` | Interactive command selection with fzf |
+| Browser | Subcommand | DB Format |
+|---------|-----------|-----------|
+| Google Chrome | `chrome` | Chromium SQLite (WebKit timestamp) |
+| Microsoft Edge | `edge` | Chromium SQLite (same as Chrome) |
+| Mozilla Firefox | `firefox` | Mozilla places.sqlite (PRTime) |
+| Apple Safari | `safari` | Core Data SQLite (macOS only) |
+
+### Commands by Browser
+
+| Command | Chrome | Edge | Firefox | Safari |
+|---------|--------|------|---------|--------|
+| `urls` | Yes | Yes | Yes | Yes |
+| `visits` | Yes | Yes | Yes | Yes |
+| `searches` | Yes | Yes | Yes | - |
+| `downloads` | Yes | Yes | - | - |
+| `annotations` | Yes | - | - | - |
+| `contexts` | Yes | - | - | - |
+| `bookmarks` | - | - | Yes | - |
+| `summary` | Yes | Yes | Yes | Yes |
 
 ### Common Options
 
@@ -48,54 +59,83 @@ chmod +x chrome-history.sh
 ### Examples
 
 ```bash
-# List URLs visited in the last week (CSV)
-./chrome-history.sh urls -f 2026-03-02 -t 2026-03-09 --format csv
+# Chrome: List URLs visited in the last week (CSV)
+./browser-history.sh chrome urls -f 2026-03-02 -t 2026-03-09 --format csv
 
-# Pipe-friendly: extract visit times and URLs
-./chrome-history.sh visits --format csv | awk -F, 'NR>1{print $3, $1}'
+# Edge: Search keywords
+./browser-history.sh edge searches -n 50
 
-# Search keywords
-./chrome-history.sh searches -f 2026-03-01
+# Firefox: Visit records with transition tracking
+./browser-history.sh firefox visits -f 2026-03-01 -t 2026-03-09
 
-# Summary statistics
-./chrome-history.sh summary -f 2026-03-01 -t 2026-03-09
+# Firefox: Bookmarks
+./browser-history.sh firefox bookmarks --format csv
 
-# Top 10 most visited URLs
-./chrome-history.sh urls -n 10
+# Safari: Summary statistics
+./browser-history.sh safari summary -f 2026-03-01
 
-# Download history as CSV
-./chrome-history.sh downloads --format csv > downloads.csv
+# Pipe-friendly: extract with awk
+./browser-history.sh chrome visits --format csv | awk -F, 'NR>1{print $3, $1}'
+
+# Pipe-friendly: process with read
+./browser-history.sh firefox urls --format csv | while IFS=',' read -r url title count last; do
+  echo "$title ($count visits)"
+done
 ```
 
-### Custom Chrome History DB Path
+### Custom DB Path
 
-By default, the tool auto-detects the Chrome history DB path based on the OS:
-- **macOS**: `~/Library/Application Support/Google/Chrome/Default/History`
-- **Linux**: `~/.config/google-chrome/Default/History`
-- **Windows** (Git Bash): `%LOCALAPPDATA%/Google/Chrome/User Data/Default/History`
-
-Override with the `CHROME_HISTORY_DB` environment variable:
+Override auto-detected paths with environment variables:
 
 ```bash
-export CHROME_HISTORY_DB="/path/to/your/History"
-./chrome-history.sh urls
+export CHROME_HISTORY_DB="/path/to/History"
+export EDGE_HISTORY_DB="/path/to/History"
+export FIREFOX_HISTORY_DB="/path/to/places.sqlite"
+export SAFARI_HISTORY_DB="/path/to/History.db"
+```
+
+### Default DB Paths
+
+**Chrome:**
+- macOS: `~/Library/Application Support/Google/Chrome/Default/History`
+- Linux: `~/.config/google-chrome/Default/History`
+- Windows: `%LOCALAPPDATA%/Google/Chrome/User Data/Default/History`
+
+**Edge:**
+- macOS: `~/Library/Application Support/Microsoft Edge/Default/History`
+- Linux: `~/.config/microsoft-edge/Default/History`
+- Windows: `%LOCALAPPDATA%/Microsoft/Edge/User Data/Default/History`
+
+**Firefox:**
+- macOS: `~/Library/Application Support/Firefox/Profiles/*.default-release/places.sqlite`
+- Linux: `~/.mozilla/firefox/*.default-release/places.sqlite`
+- Windows: `%APPDATA%/Mozilla/Firefox/Profiles/*.default-release/places.sqlite`
+
+**Safari:**
+- macOS: `~/Library/Safari/History.db` (requires Full Disk Access)
+
+## Architecture
+
+```
+browser-history.sh          # Main CLI entry point (router)
+├── cmd/
+│   ├── chrome.sh           # Chrome subcommand (Chromium schema)
+│   ├── edge.sh             # Edge subcommand (Chromium schema)
+│   ├── firefox.sh          # Firefox subcommand (Mozilla schema)
+│   └── safari.sh           # Safari subcommand (Core Data schema)
+└── lib/
+    └── common.sh           # Shared helpers (DB copy, date filters, query)
 ```
 
 ## Output Format
 
-- Default: TSV (tab-separated) — ideal for `awk` processing
-- Optional: CSV with `--format csv` — ideal for spreadsheets and `read` loops
+- Default: TSV (tab-separated) for `awk` processing
+- Optional: CSV with `--format csv` for spreadsheets and `read` loops
 - First line is always a header row
 
-```bash
-# Process with awk
-./chrome-history.sh urls | awk -F'\t' 'NR>1{print $3, $1}'
+## Legacy
 
-# Process with read
-./chrome-history.sh urls --format csv | while IFS=',' read -r url title count typed last; do
-  echo "URL: $url (visited $count times)"
-done
-```
+The original `chrome-history.sh` (single-browser version) is still available for backwards compatibility.
 
 ## License
 
